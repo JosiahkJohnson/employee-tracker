@@ -8,10 +8,13 @@ const ctable = require("console.table");
 const TEXT_ADD = "Add";
 const TEXT_VIEW = "View";
 const TEXT_UPDATE = "Update";
+const TEXT_EXIT = "Exit";
+
 //for add(); and view();
 const TEXT_DEPARTMENT = "Department";
 const TEXT_ROLE = "Role";
 const TEXT_EMPLOYEE = "Employee";
+
 //for update();
 const TEXT_YES = "yes";
 const TEXT_NO = "no";
@@ -23,7 +26,7 @@ const connection = mysql.createConnection({
     user: "root",
     password: "Stonehammers",
     database: "cms_DB"
-})
+});
 
 //start the connection and prompt the user for how they want to use the table
 connection.connect(function(error){
@@ -31,6 +34,7 @@ connection.connect(function(error){
 
     console.log("Connected with ID: ", connection.threadId);
 
+    //start the main function if all is good
     queryUser();
 });
 
@@ -39,19 +43,22 @@ function queryUser(){
         name: "action",
         type: "list",
         message: "Would you like to Add, View, or Update?",
-        choices: [TEXT_ADD, TEXT_VIEW, TEXT_UPDATE]
+        choices: [TEXT_ADD, TEXT_VIEW, TEXT_UPDATE, TEXT_EXIT]
     }).then(function(response){
         
         //this switch function should handle responses to the first question about adding, viewing, and updating
         switch(response.action){
             case TEXT_ADD:
-                add();
+                addToTable();
                 break;
             case TEXT_VIEW:
                 view();
                 break;
             case TEXT_UPDATE:
                 update();
+                break;
+            case TEXT_EXIT:
+                connection.end();
                 break;
             default:
                 console.log("This text shouldn't appear, there is something wrong with the queryUser() prompt or the switch after.");
@@ -60,7 +67,7 @@ function queryUser(){
 }
 
 //the function that gets called when the user selects to add something in the program
-function add(){
+function addToTable(){
     inquire.prompt({
         name: "action",
         type: "list",
@@ -71,21 +78,133 @@ function add(){
         //switch function to chose which add function to employ
         switch(response.action){
             case TEXT_DEPARTMENT:
-                //externalfile.addDepartment();
-                console.log("Department added!");
+                addDepartment();
                 break;
             case TEXT_ROLE:
-                //externalfile.addRole();
-                console.log("Role added!");
+                addRole();
                 break;
             case TEXT_EMPLOYEE:
-                //externalfile.addEmployee();
-                console.log("Employee added!");
+                addEmployee();
                 break;
             default:
                 console.log("This text shouldn't appear, something's wrong with the add() prompt, or the switch after.")
         }
-        queryUser();
+    });
+}
+
+//function to add a department to the department table
+function addDepartment(){
+    inquire.prompt({
+        name: "name",
+        type: "input",
+        message: "Name of department to add"
+    }).then(function(response){
+        connection.query(
+        "INSERT INTO department SET ?",
+        { 
+            name: response.name
+        },
+        function(err){
+            if(err) throw err;
+            console.log(`New department ${response.name} created.`);
+            
+            //continue program
+            queryUser();
+        })
+    });
+}
+
+//function to add a role to the role table
+function addRole(){
+    inquire.prompt([{
+        name: "title",
+        type: "input",
+        message: "Enter new role's title"
+    },
+    {
+        name: "salary",
+        type: "input",
+        message: "Enter the yearly salary of the new role"
+    }]).then(function(response){
+        connection.query("INSERT INTO role SET ?",
+        {
+            title: response.title,
+            salary: response.salary
+        },
+        function(error){
+            if(error) throw error;
+            console.log(`New role added, ${response.title}, salary: ${response.salary}`);
+
+            //call back the main function to continue program
+            queryUser();
+        })
+    });
+}
+
+//add employee function adds an employee
+function addEmployee(){
+    //used for the none option on manager
+    const TEXT_NONE = "none";
+    
+    //create the list of roles that the new employee can fill
+    const roles = [];
+    connection.query("SELECT title FROM role", function(err, res){
+        if(err) throw err;
+        
+        res.forEach(result =>{
+            roles.push(result.title);
+        });
+    });
+
+    //create the list of employee's that could be the new employee's manager
+    const employees = [];
+    connection.query("SELECT first_name FROM employee", function(err, res){
+        if(err) throw err;
+
+        res.forEach(result =>{
+            employees.push(result.first_name)
+        });
+        employees.push(TEXT_NONE);
+    });
+    
+    inquire.prompt([{
+        name: "firstName",
+        type: "input",
+        message: "New employee's first name"
+    },
+    {
+        name: "lastName",
+        type: "input",
+        message: "New employee's last name"
+    },
+    {
+        name: "role",
+        type: "list",
+        choices: roles,
+        message: "Select role for the new Employee"
+    },
+    {
+        name: "manager",
+        type: "list",
+        choices: employees,
+        message: "Choose the new employee's manager"
+    }
+    ]).then(function(response){
+        const newRoleId = roles.indexOf(response.role) + 1;
+        const newManagerId = employees.indexOf(response.manager) + 1;
+
+        connection.query("INSERT INTO employee SET ?",{
+            first_name: response.firstName,
+            last_name: response.lastName,
+            role_id: newRoleId,
+            manager_id: newManagerId
+        }, function(error){
+            if(error) throw error;
+
+            console.log(`New employee added, ${response.firstName} ${response.lastName}, ${response.role}, manager: ${response.manager}`);
+            //callback to start
+            queryUser();
+        });
     });
 }
 
@@ -112,6 +231,8 @@ function view(){
             default:
                 console.log("This text shouldn't appear, something's wrong with the view() prompt, or the switch after.")
         }
+
+        //callback main function
         queryUser();
     });
 }
@@ -134,6 +255,8 @@ function update(){
             default:
                 console.log("This text shouldn't appear, something's wrong with the update() prompt, or the switch after");
         }
+
+        //callback main function
         queryUser();
     });
 }
