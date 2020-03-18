@@ -24,7 +24,7 @@ const connection = mysql.createConnection({
     host: "localhost",
     port: 3306,
     user: "root",
-    password: "Stonehammers",
+    password: "password",
     database: "cms_DB"
 });
 
@@ -108,14 +108,22 @@ function addDepartment(){
             if(err) throw err;
             console.log(`New department ${response.name} created.`);
             
-            //continue program
-            queryUser();
         })
     });
 }
 
 //function to add a role to the role table
 function addRole(){
+    //select all the departments to put the role into
+    const departments = [];
+    connection.query("SELECT name FROM department", function(err, res){
+        if(err) throw err;
+        
+        res.forEach(result =>{
+            departments.push(result.name);
+        });
+    });
+
     inquire.prompt([{
         name: "title",
         type: "input",
@@ -125,18 +133,24 @@ function addRole(){
         name: "salary",
         type: "input",
         message: "Enter the yearly salary of the new role"
+    },
+    {
+        name: "department",
+        type: "list",
+        message: "Choose a department for the role",
+        choices: departments
     }]).then(function(response){
+        const departmentId = departments.indexOf(response.department) + 1;
+
         connection.query("INSERT INTO role SET ?",
         {
             title: response.title,
-            salary: response.salary
+            salary: response.salary,
+            department_id: departmentId
         },
         function(error){
             if(error) throw error;
             console.log(`New role added, ${response.title}, salary: ${response.salary}`);
-
-            //call back the main function to continue program
-            queryUser();
         })
     });
 }
@@ -191,8 +205,14 @@ function addEmployee(){
     }
     ]).then(function(response){
         const newRoleId = roles.indexOf(response.role) + 1;
-        const newManagerId = employees.indexOf(response.manager) + 1;
-
+        let newManagerId;
+        if(response.manager === TEXT_NONE){
+            newManagerId = null;
+        }
+        else{
+            newManagerId = employees.indexOf(response.manager) + 1;
+        }
+    
         connection.query("INSERT INTO employee SET ?",{
             first_name: response.firstName,
             last_name: response.lastName,
@@ -202,8 +222,6 @@ function addEmployee(){
             if(error) throw error;
 
             console.log(`New employee added, ${response.firstName} ${response.lastName}, ${response.role}, manager: ${response.manager}`);
-            //callback to start
-            queryUser();
         });
     });
 }
@@ -220,43 +238,76 @@ function view(){
         //switch function to chose which table to view
         switch(response.action){
             case TEXT_DEPARTMENT:
-                console.log("Departments Table!");
+                viewData("department");
                 break;
             case TEXT_ROLE:
-                console.log("Role Table!");
+                viewData("role");
                 break;
             case TEXT_EMPLOYEE:
-                console.log("Employee Table!");
+                viewData("employee");
                 break;
             default:
                 console.log("This text shouldn't appear, something's wrong with the view() prompt, or the switch after.")
         }
 
-        //callback main function
-        queryUser();
+    });
+}
+
+//this function should console a table from the database based on the name of said table passed into it
+function viewData(table){
+    console.log("\n\n\n");
+    connection.query("SELECT * FROM " + table, function(error, results){
+        if(error) throw error;
+
+        console.table(results);
     });
 }
 
 //update function that gets called when the user chooses to update, displays a yes or no confirmation
 function update(){
-    inquire.prompt({
-        name: "action",
-        type: "list",
-        message: "Update employee(s)?",
-        choices: [TEXT_YES, TEXT_NO]
-    }).then(function(response){
-        switch(response.action){
-            case TEXT_YES:
-                console.log("Employee updated!");
-                break;
-            case TEXT_NO:
-                console.log("Employees unchanged!");
-                break;
-            default:
-                console.log("This text shouldn't appear, something's wrong with the update() prompt, or the switch after");
-        }
+    const employeeList = [];
+    const roles = [];
+    connection.query("SELECT * FROM employee", function(error, results){
+        if(error) throw error;
 
-        //callback main function
-        queryUser();
+        results.forEach(result =>{
+            employeeList.push(result.first_name);
+        });
+        //console.log(employeeList);
+    });
+    connection.query("SELECT title FROM role", function(err, res){
+        if(err) throw err;
+        
+        res.forEach(result =>{
+            roles.push(result.title);
+        });
+    });
+
+    inquire.prompt([{
+        //this first question basically slows down the program so it can get the lists it needs from the database
+        name: "buffer",
+        type: "list",
+        message: "press enter to start the update",
+        choices: ["enter"]
+    },
+    {
+        name: "employee",
+        type: "list",
+        message: "choose employee to update role",
+        choices: employeeList
+    },
+    {
+        name: "role",
+        type: "list",
+        message: "Choose the employee's new role",
+        choices: roles
+    }]).then(function(response){
+        //console.log(response.role);
+        //console.log(response.employee);
+        connection.query("UPDATE employee SET ? WHERE ?", [{ role_id: roles.indexOf(response.role) + 1 },{ first_name: response.employee }], function(error, response){
+            if(error) throw error;
+
+            console.log(response.affectedRows + " employee role updated");
+        });
     });
 }
